@@ -1,0 +1,15 @@
+[
+{"TowerPlaceCost":325,"TowerPlaced":"Slammer","TowerVector":"-1.054394245147705, 99.79322814941406, -212.89630126953125","Rotation":"0","TowerA1":"4266.3743897000095"},
+{"TowerPlaceCost":325,"TowerPlaced":"Slammer","TowerVector":"-2.169950246810913, 99.79322814941406, -207.4304656982422","Rotation":"0","TowerA1":"4268.1896653"},
+{"TargetTime":2,"TargetType":1,"TowerTargetChange":-1.054394245147705,"TargetWave":"WAVE 0"},
+{"TargetTime":1,"TargetType":2,"TowerTargetChange":-1.054394245147705,"TargetWave":"WAVE 0"},
+{"TargetTime":1,"TargetType":1,"TowerTargetChange":-2.169950246810913,"TargetWave":"WAVE 0"},
+{"TargetTime":1,"TargetType":2,"TowerTargetChange":-2.169950246810913,"TargetWave":"WAVE 0"},
+{"SellTower":-2.169950246810913,"SellWave":"WAVE 2","SellTime":57},
+{"TowerPlaceCost":280,"TowerPlaced":"Ranger","TowerVector":"-2.1089134216308594, 99.79322814941406, -207.4447479248047","Rotation":"0","TowerA1":"4282.46709820001"},
+{"TowerUpgraded":-2.1089134216308595,"UpgradeCost":0,"UpgradePath":1},
+{"TowerUpgraded":-2.1089134216308595,"UpgradeCost":0,"UpgradePath":1},
+{"TargetTime":47,"TargetType":1,"TowerTargetChange":-1.054394245147705,"TargetWave":"WAVE 2"},
+{"TowerUpgraded":-1.054394245147705,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":-1.054394245147705,"UpgradeCost":0,"UpgradePath":1}
+]
