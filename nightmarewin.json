@@ -1,12 +1,12 @@
 [
-{"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"-21.40585708618164, 0.5645577907562256, -23.27131462097168","Rotation":"0","TowerA1":"752.7449257000117"},
-{"TowerUpgraded":-21.40585708618164,"UpgradeCost":0,"UpgradePath":2},
-{"TowerUpgraded":-21.40585708618164,"UpgradeCost":0,"UpgradePath":2},
-{"TowerUpgraded":-21.40585708618164,"UpgradeCost":0,"UpgradePath":1},
-{"TowerUpgraded":-21.40585708618164,"UpgradeCost":0,"UpgradePath":1},
-{"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"-25.094205856323242, 0.4989503026008606, -14.572809219360352","Rotation":"0","TowerA1":"757.4413371999981"},
-{"TowerUpgraded":-25.094205856323243,"UpgradeCost":0,"UpgradePath":2},
-{"TowerUpgraded":-25.094205856323243,"UpgradeCost":0,"UpgradePath":2},
-{"TowerUpgraded":-25.094205856323243,"UpgradeCost":0,"UpgradePath":1},
-{"TowerUpgraded":-25.094205856323243,"UpgradeCost":0,"UpgradePath":1}
+{"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"-23.579940795898438, 2.6193227767944336, 0.3511381149291992","Rotation":"0","TowerA1":"939.266345800017"},
+{"TowerUpgraded":-23.579940795898439,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":-23.579940795898439,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":-23.579940795898439,"UpgradeCost":0,"UpgradePath":1},
+{"TowerUpgraded":-23.579940795898439,"UpgradeCost":0,"UpgradePath":1},
+{"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"-26.635929107666016, 2.619321823120117, 0.6532468795776367","Rotation":"0","TowerA1":"942.7685277000128"},
+{"TowerUpgraded":-26.635929107666017,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":-26.635929107666017,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":-26.635929107666017,"UpgradeCost":0,"UpgradePath":1},
+{"TowerUpgraded":-26.635929107666017,"UpgradeCost":0,"UpgradePath":1}
 ]
