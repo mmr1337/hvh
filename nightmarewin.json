@@ -1,12 +1,18 @@
 [
-{"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"-23.579940795898438, 2.6193227767944336, 0.3511381149291992","Rotation":"0","TowerA1":"939.266345800017"},
-{"TowerUpgraded":-23.579940795898439,"UpgradeCost":0,"UpgradePath":2},
-{"TowerUpgraded":-23.579940795898439,"UpgradeCost":0,"UpgradePath":2},
-{"TowerUpgraded":-23.579940795898439,"UpgradeCost":0,"UpgradePath":1},
-{"TowerUpgraded":-23.579940795898439,"UpgradeCost":0,"UpgradePath":1},
-{"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"-26.635929107666016, 2.619321823120117, 0.6532468795776367","Rotation":"0","TowerA1":"942.7685277000128"},
-{"TowerUpgraded":-26.635929107666017,"UpgradeCost":0,"UpgradePath":2},
-{"TowerUpgraded":-26.635929107666017,"UpgradeCost":0,"UpgradePath":2},
-{"TowerUpgraded":-26.635929107666017,"UpgradeCost":0,"UpgradePath":1},
-{"TowerUpgraded":-26.635929107666017,"UpgradeCost":0,"UpgradePath":1}
+{"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"-55.2461051940918, 61.28353500366211, 167.37371826171875","Rotation":"0","TowerA1":"130.10281929999474"},
+{"TowerUpgraded":-55.2461051940918,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":-55.2461051940918,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":-55.2461051940918,"UpgradeCost":0,"UpgradePath":2},
+{"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"-51.63896179199219, 61.29085922241211, 156.1614532470703","Rotation":"0","TowerA1":"140.0305304999929"},
+{"TowerUpgraded":-51.63896179199219,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":-51.63896179199219,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":-51.63896179199219,"UpgradeCost":0,"UpgradePath":2},
+{"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"1.3201813697814941, 52.955291748046875, 161.9750213623047","Rotation":"0","TowerA1":"143.80352950000088"},
+{"TowerUpgraded":1.3201813697814942,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":1.3201813697814942,"UpgradeCost":0,"UpgradePath":2},
+{"TowerUpgraded":1.3201813697814942,"UpgradeCost":0,"UpgradePath":1},
+{"TowerUpgraded":1.3201813697814942,"UpgradeCost":0,"UpgradePath":1},
+{"SellTower":1.3201813697814942,"SellWave":"WAVE 1","SellTime":1128},
+{"SellTower":-55.2461051940918,"SellWave":"WAVE 1","SellTime":1126},
+{"SellTower":-51.63896179199219,"SellWave":"WAVE 1","SellTime":1125}
 ]
