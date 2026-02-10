@@ -1,5 +1,4 @@
 [
-    {"SuperFunction": "rebuild"},
 {"TowerPlaceCost":1000,"TowerPlaced":"Golden Mobster","TowerVector":"-23.644481658935547, 2.6193246841430664, 0.4906740188598633","Rotation":"0","TowerA1":"984.8395499000035"},
 {"TowerUpgraded":-23.644481658935548,"UpgradeCost":0,"UpgradePath":2},
 {"TowerUpgraded":-23.644481658935548,"UpgradeCost":0,"UpgradePath":2},
