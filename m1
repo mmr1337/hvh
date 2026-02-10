@@ -5,10 +5,8 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local PlayerScripts = player:WaitForChild("PlayerScripts")
 
--- XÓA FILE CŨ NẾU ĐÃ TỒN TẠI TRƯỚC KHI GHI RECORD
-local outJson = "tdx/macros/NightmareEvent.json"
+local outJson = "tdx/macros/NightmareEventNEW.json"
 
--- Xóa file nếu đã tồn tại
 if isfile and isfile(outJson) and delfile then
     local ok, err = pcall(delfile, outJson)
     if not ok then
@@ -19,13 +17,11 @@ end
 local recordedActions = {}
 local hash2pos = {}
 
--- Hàng đợi và cấu hình cho việc ghi nhận
 local pendingQueue = {}
 local timeout = 2
 local lastKnownLevels = {}
 local lastUpgradeTime = {}
 
--- Universal compatibility functions
 local function getGlobalEnv()
     if getgenv then return getgenv() end
     if getfenv then return getfenv() end
@@ -34,42 +30,14 @@ end
 
 local globalEnv = getGlobalEnv()
 
--- SỬA: Lấy TowerClass một cách an toàn từ cả PlayerScripts VÀ StarterPlayerScripts
 local TowerClass
-local function loadTowerClass()
-    local paths = {
-        {root = PlayerScripts, name = "PlayerScripts"},
-        {root = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts"), name = "StarterPlayerScripts"}
-    }
-    
-    for _, pathInfo in ipairs(paths) do
-        local success, result = pcall(function()
-            local client = pathInfo.root:WaitForChild("Client", 5)
-            if not client then return nil end
-            local gameClass = client:WaitForChild("GameClass", 5)
-            if not gameClass then return nil end
-            local towerModule = gameClass:WaitForChild("TowerClass", 5)
-            if not towerModule then return nil end
-            return require(towerModule)
-        end)
-        
-        if success and result then
-            print("✅ TowerClass loaded from:", pathInfo.name)
-            return result
-        end
-    end
-    
-    warn("❌ CRITICAL: Failed to load TowerClass from any path!")
-    return nil
-end
+pcall(function()
+    local client = PlayerScripts:WaitForChild("Client")
+    local gameClass = client:WaitForChild("GameClass")
+    local towerModule = gameClass:WaitForChild("TowerClass")
+    TowerClass = require(towerModule)
+end)
 
-TowerClass = loadTowerClass()
-
-if not TowerClass then
-    warn("❌ Macro recording will NOT work without TowerClass!")
-end
-
--- Tạo thư mục nếu chưa tồn tại
 if makefolder then
     pcall(makefolder, "tdx")
     pcall(makefolder, "tdx/macros")
@@ -79,19 +47,15 @@ end
 --=                           HÀM TIỆN ÍCH (HELPERS)                           =
 --==============================================================================
 
--- Hàm ghi file an toàn
 local function safeWriteFile(path, content)
     if writefile then
         local success, err = pcall(writefile, path, content)
         if not success then
             warn("Lỗi khi ghi file: " .. tostring(err))
-        else
-            print("📝 File written:", path, "| Actions:", #recordedActions)
         end
     end
 end
 
--- Hàm đọc file an toàn
 local function safeReadFile(path)
     if isfile and isfile(path) and readfile then
         local success, content = pcall(readfile, path)
@@ -102,30 +66,26 @@ local function safeReadFile(path)
     return ""
 end
 
--- Lấy vị trí SpawnCFrame của tower
 local function GetTowerSpawnPosition(tower)
     if not tower then return nil end
-    
     local spawnCFrame = tower.SpawnCFrame
     if spawnCFrame and typeof(spawnCFrame) == "CFrame" then
         return spawnCFrame.Position
     end
-    
     return nil
 end
 
--- Lấy chi phí đặt tower dựa trên tên
 local function GetTowerPlaceCostByName(name)
     local playerGui = player:FindFirstChildOfClass("PlayerGui")
     if not playerGui then return 0 end
-    
+
     local interface = playerGui:FindFirstChild("Interface")
     if not interface then return 0 end
     local bottomBar = interface:FindFirstChild("BottomBar")
     if not bottomBar then return 0 end
     local towersBar = bottomBar:FindFirstChild("TowersBar")
     if not towersBar then return 0 end
-    
+
     for _, towerButton in ipairs(towersBar:GetChildren()) do
         if towerButton.Name == name then
             local costFrame = towerButton:FindFirstChild("CostFrame")
@@ -141,22 +101,40 @@ local function GetTowerPlaceCostByName(name)
     return 0
 end
 
--- Lấy thông tin wave và thời gian hiện tại
 local function getCurrentWaveAndTime()
     local playerGui = player:FindFirstChildOfClass("PlayerGui")
     if not playerGui then return nil, nil end
-    
+
     local interface = playerGui:FindFirstChild("Interface")
     if not interface then return nil, nil end
+    
     local gameInfoBar = interface:FindFirstChild("GameInfoBar")
     if not gameInfoBar then return nil, nil end
     
-    local wave = gameInfoBar.Wave.WaveText.Text
-    local time = gameInfoBar.TimeLeft.TimeLeftText.Text
+    local defaultFrame = gameInfoBar:FindFirstChild("Default")
+    if not defaultFrame then return nil, nil end
+
+    local wave, time
+    
+    local waveFrame = defaultFrame:FindFirstChild("Wave")
+    if waveFrame then
+        local waveText = waveFrame:FindFirstChild("WaveText")
+        if waveText and waveText:IsA("TextLabel") then
+            wave = waveText.Text
+        end
+    end
+    
+    local timeFrame = defaultFrame:FindFirstChild("TimeLeft")
+    if timeFrame then
+        local timeText = timeFrame:FindFirstChild("TimeLeftText")
+        if timeText and timeText:IsA("TextLabel") then
+            time = timeText.Text
+        end
+    end
+
     return wave, time
 end
 
--- Chuyển đổi chuỗi thời gian thành số
 local function convertTimeToNumber(timeStr)
     if not timeStr then return nil end
     local mins, secs = timeStr:match("(%d+):(%d+)")
@@ -166,7 +144,6 @@ local function convertTimeToNumber(timeStr)
     return nil
 end
 
--- Lấy tên tower từ hash
 local function GetTowerNameByHash(towerHash)
     if not TowerClass or not TowerClass.GetTowers then return nil end
     local towers = TowerClass.GetTowers()
@@ -177,41 +154,21 @@ local function GetTowerNameByHash(towerHash)
     return nil
 end
 
--- Kiểm tra xem tower có phải moving skill tower không
 local function IsMovingSkillTower(towerName, skillIndex)
     if not towerName or not skillIndex then return false end
-    
-    if towerName == "Helicopter" and (skillIndex == 1 or skillIndex == 3) then
-        return true
-    end
-    
-    if towerName == "Cryo Helicopter" and (skillIndex == 1 or skillIndex == 3) then
-        return true
-    end
-    
-    if towerName == "Jet Trooper" and skillIndex == 1 then
-        return true
-    end
-    
+    if towerName == "Helicopter" and (skillIndex == 1 or skillIndex == 3) then return true end
+    if towerName == "Cryo Helicopter" and (skillIndex == 1 or skillIndex == 3) then return true end
+    if towerName == "Jet Trooper" and skillIndex == 1 then return true end
     return false
 end
 
--- Kiểm tra skill có cần position không
 local function IsPositionRequiredSkill(towerName, skillIndex)
     if not towerName or not skillIndex then return false end
-    
-    if skillIndex == 1 then
-        return true
-    end
-    
-    if skillIndex == 3 then
-        return false
-    end
-    
+    if skillIndex == 1 then return true end
+    if skillIndex == 3 then return false end
     return true
 end
 
--- Cập nhật file JSON với dữ liệu mới
 local function updateJsonFile()
     if not HttpService then return end
     local jsonLines = {}
@@ -228,11 +185,10 @@ local function updateJsonFile()
     safeWriteFile(outJson, finalJson)
 end
 
--- Đọc file JSON hiện có để bảo toàn các "SuperFunction"
 local function preserveSuperFunctions()
     local content = safeReadFile(outJson)
     if content == "" then return end
-    
+
     content = content:gsub("^%[%s*", ""):gsub("%s*%]$", "")
     for line in content:gmatch("[^\r\n]+") do
         line = line:gsub(",$", "")
@@ -248,9 +204,7 @@ local function preserveSuperFunctions()
     end
 end
 
--- Phân tích một dòng lệnh macro và trả về một bảng dữ liệu
 local function parseMacroLine(line)
-    -- Skip wave
     if line:match('TDX:skipWave%(%)') then
         local currentWave, currentTime = getCurrentWaveAndTime()
         return {{
@@ -258,8 +212,7 @@ local function parseMacroLine(line)
             SkipWhen = convertTimeToNumber(currentTime)
         }}
     end
-    
-    -- Moving skill WITH position
+
     local hash, skillIndex, x, y, z = line:match('TDX:useMovingSkill%(([^,]+),%s*([^,]+),%s*Vector3%.new%(([^,]+),%s*([^,]+),%s*([^%)]+)%)%)')
     if hash and skillIndex and x and y and z then
         local pos = hash2pos[tostring(hash)]
@@ -274,8 +227,7 @@ local function parseMacroLine(line)
             }}
         end
     end
-    
-    -- Skill WITHOUT position
+
     local hash, skillIndex = line:match('TDX:useSkill%(([^,]+),%s*([^%)]+)%)')
     if hash and skillIndex then
         local pos = hash2pos[tostring(hash)]
@@ -290,8 +242,7 @@ local function parseMacroLine(line)
             }}
         end
     end
-    
-    -- Place tower
+
     local a1, name, x, y, z, rot = line:match('TDX:placeTower%(([^,]+),%s*([^,]+),%s*Vector3%.new%(([^,]+),%s*([^,]+),%s*([^%)]+)%)%s*,%s*([^%)]+)%)')
     if a1 and name and x and y and z and rot then
         name = tostring(name):gsub('^%s*"(.-)"%s*$', '%1')
@@ -303,8 +254,7 @@ local function parseMacroLine(line)
             TowerA1 = a1
         }}
     end
-    
-    -- Upgrade tower
+
     local hash, path, upgradeCount = line:match('TDX:upgradeTower%(([^,]+),%s*([^,]+),%s*([^%)]+)%)')
     if hash and path and upgradeCount then
         local pos = hash2pos[tostring(hash)]
@@ -321,67 +271,62 @@ local function parseMacroLine(line)
             return entries
         end
     end
-    
-    -- Change target
+
     local hash, targetType = line:match('TDX:changeQueryType%(([^,]+),%s*([^%)]+)%)')
     if hash and targetType then
         local pos = hash2pos[tostring(hash)]
         if pos then
             local currentWave, currentTime = getCurrentWaveAndTime()
-            local entry = {
+            return {{
                 TowerTargetChange = pos.x,
-                TargetWanted = tonumber(targetType),
+                TargetType = tonumber(targetType),
                 TargetWave = currentWave,
-                TargetChangedAt = convertTimeToNumber(currentTime)
-            }
-            return {entry}
+                TargetTime = convertTimeToNumber(currentTime)
+            }}
         end
     end
-    
-    -- Sell tower
-    local hash = line:match('TDX:sellTower%(([^%)]+)%)')
-    if hash then
+
+    -- [НОВОЕ] SellTower с wave и time
+    local hash, wave, time = line:match('TDX:sellTower%(([^,]+),%s*"([^"]+)",%s*([^%)]+)%)')
+    if hash and wave and time then
         local pos = hash2pos[tostring(hash)]
         if pos then
-            return {{ SellTower = pos.x }}
+            return {{ 
+                SellTower = pos.x,
+                SellWave = wave,
+                SellTime = tonumber(time)
+            }}
         end
     end
-    
+
     return nil
 end
 
--- Xử lý một dòng lệnh, phân tích và ghi vào file JSON
 local function processAndWriteAction(commandString)
-    print("🔵 Processing action:", commandString)
-    
     if globalEnv.TDX_REBUILDING_TOWERS then
         local axisX = nil
-        
+
         local a1, towerName, vec, rot = commandString:match('TDX:placeTower%(([^,]+),%s*([^,]+),%s*Vector3%.new%(([^,]+),%s*([^,]+),%s*([^%)]+)%)%s*,%s*([^%)]+)%)')
         if vec then
             axisX = tonumber(vec)
         end
-        
+
         if not axisX then
             local hash = commandString:match('TDX:upgradeTower%(([^,]+),')
             if hash then
                 local pos = hash2pos[tostring(hash)]
-                if pos then
-                    axisX = pos.x
-                end
+                if pos then axisX = pos.x end
             end
         end
-        
+
         if not axisX then
             local hash = commandString:match('TDX:changeQueryType%(([^,]+),')
             if hash then
                 local pos = hash2pos[tostring(hash)]
-                if pos then
-                    axisX = pos.x
-                end
+                if pos then axisX = pos.x end
             end
         end
-        
+
         if not axisX then
             local hash = commandString:match('TDX:useMovingSkill%(([^,]+),')
             if not hash then
@@ -389,27 +334,29 @@ local function processAndWriteAction(commandString)
             end
             if hash then
                 local pos = hash2pos[tostring(hash)]
-                if pos then
-                    axisX = pos.x
-                end
+                if pos then axisX = pos.x end
             end
         end
-        
+
+        if not axisX then
+            local hash = commandString:match('TDX:sellTower%(([^,]+),')
+            if hash then
+                local pos = hash2pos[tostring(hash)]
+                if pos then axisX = pos.x end
+            end
+        end
+
         if axisX and globalEnv.TDX_REBUILDING_TOWERS[axisX] then
-            print("⏭️ Skipped (rebuilding):", axisX)
             return
         end
     end
-    
+
     local entries = parseMacroLine(commandString)
     if entries then
         for _, entry in ipairs(entries) do
             table.insert(recordedActions, entry)
         end
         updateJsonFile()
-        print("✅ Action recorded! Total actions:", #recordedActions)
-    else
-        warn("⚠️ Failed to parse:", commandString)
     end
 end
 
@@ -418,7 +365,6 @@ end
 --==============================================================================
 
 local function setPending(typeStr, code, hash)
-    print("⏳ Pending:", typeStr, "| Code:", code)
     table.insert(pendingQueue, {
         type = typeStr,
         code = code,
@@ -432,7 +378,6 @@ local function tryConfirm(typeStr, specificHash)
         local item = pendingQueue[i]
         if item.type == typeStr then
             if not specificHash or string.find(item.code, tostring(specificHash)) then
-                print("✔️ Confirmed:", typeStr)
                 processAndWriteAction(item.code)
                 table.remove(pendingQueue, i)
                 return
@@ -441,30 +386,68 @@ local function tryConfirm(typeStr, specificHash)
     end
 end
 
--- Events
+-- [НОВОЕ] Детектор продажи башен через мониторинг TowerClass
+local lastTowerCount = 0
+local soldTowerData = {}
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if TowerClass and TowerClass.GetTowers then
+            local currentTowers = TowerClass.GetTowers()
+            local currentCount = 0
+            local currentHashes = {}
+            
+            for hash, tower in pairs(currentTowers) do
+                currentCount = currentCount + 1
+                currentHashes[tostring(hash)] = true
+            end
+            
+            if currentCount < lastTowerCount then
+                for hashStr, posData in pairs(hash2pos) do
+                    if not currentHashes[hashStr] and not soldTowerData[hashStr] then
+                        local currentWave, currentTime = getCurrentWaveAndTime()
+                        local code = string.format('TDX:sellTower(%s, "%s", %s)', 
+                            hashStr,
+                            tostring(currentWave or "Unknown"),
+                            tostring(convertTimeToNumber(currentTime) or 0))
+                        
+                        soldTowerData[hashStr] = true
+                        processAndWriteAction(code)
+                        
+                        -- Очищаем hash2pos для проданной башни
+                        hash2pos[hashStr] = nil
+                        break
+                    end
+                end
+            end
+            
+            lastTowerCount = currentCount
+        end
+    end
+end)
+
 ReplicatedStorage.Remotes.TowerFactoryQueueUpdated.OnClientEvent:Connect(function(data)
     local d = data and data[1]
     if not d then return end
     if d.Creation then
         tryConfirm("Place")
-    else
-        tryConfirm("Sell")
     end
+    -- Sell confirmation удален, используем детектор выше
 end)
 
 ReplicatedStorage.Remotes.TowerUpgradeQueueUpdated.OnClientEvent:Connect(function(data)
     if not data or not data[1] then return end
-    
+
     local towerData = data[1]
     local hash = towerData.Hash
     local newLevels = towerData.LevelReplicationData
     local currentTime = tick()
-    
+
     if lastUpgradeTime[hash] and (currentTime - lastUpgradeTime[hash]) < 0.0001 then
         return
     end
     lastUpgradeTime[hash] = currentTime
-    
+
     local upgradedPath, upgradeCount = nil, 0
     if lastKnownLevels[hash] then
         for path = 1, 2 do
@@ -477,11 +460,11 @@ ReplicatedStorage.Remotes.TowerUpgradeQueueUpdated.OnClientEvent:Connect(functio
             end
         end
     end
-    
+
     if upgradedPath and upgradeCount > 0 then
         local code = string.format("TDX:upgradeTower(%s, %d, %d)", tostring(hash), upgradedPath, upgradeCount)
         processAndWriteAction(code)
-        
+
         for i = #pendingQueue, 1, -1 do
             if pendingQueue[i].type == "Upgrade" and pendingQueue[i].hash == hash then
                 table.remove(pendingQueue, i)
@@ -490,7 +473,7 @@ ReplicatedStorage.Remotes.TowerUpgradeQueueUpdated.OnClientEvent:Connect(functio
     else
         tryConfirm("Upgrade", hash)
     end
-    
+
     lastKnownLevels[hash] = newLevels or {}
 end)
 
@@ -529,21 +512,19 @@ local skipWaveConnection = RunService.Heartbeat:Connect(function()
 end)
 
 local function handleRemote(name, args)
-    print("🔔 Remote called:", name)
-    
     if name == "SkipWaveVoteCast" then
         if args and args[1] == true then
             setPending("SkipWave", "TDX:skipWave()")
         end
     end
-    
+
     if name == "TowerUseAbilityRequest" then
         local towerHash, skillIndex, targetPos = unpack(args)
         if typeof(towerHash) == "number" and typeof(skillIndex) == "number" then
             local towerName = GetTowerNameByHash(towerHash)
             if IsMovingSkillTower(towerName, skillIndex) then
                 local code
-                
+
                 if IsPositionRequiredSkill(towerName, skillIndex) and typeof(targetPos) == "Vector3" then
                     code = string.format("TDX:useMovingSkill(%s, %d, Vector3.new(%s, %s, %s))", 
                         tostring(towerHash), 
@@ -556,14 +537,14 @@ local function handleRemote(name, args)
                         tostring(towerHash), 
                         skillIndex)
                 end
-                
+
                 if code then
                     setPending("MovingSkill", code, towerHash)
                 end
             end
         end
     end
-    
+
     if name == "TowerUpgradeRequest" then
         local hash, path, count = unpack(args)
         if typeof(hash) == "number" and typeof(path) == "number" and typeof(count) == "number" and path >= 0 and path <= 2 and count > 0 and count <= 5 then
@@ -575,31 +556,31 @@ local function handleRemote(name, args)
             local code = string.format('TDX:placeTower(%s, "%s", Vector3.new(%s, %s, %s), %s)', tostring(a1), towerName, tostring(vec.X), tostring(vec.Y), tostring(vec.Z), tostring(rot))
             setPending("Place", code)
         end
-    elseif name == "SellTower" then
-        setPending("Sell", "TDX:sellTower("..tostring(args[1])..")")
+    -- SellTower удален из handleRemote, используется детектор
     elseif name == "ChangeQueryType" then
-        setPending("Target", string.format("TDX:changeQueryType(%s, %s)", tostring(args[1]), tostring(args[2])))
+        local towerHash, targetType = unpack(args)
+        if typeof(towerHash) == "number" and typeof(targetType) == "number" then
+            setPending("Target", string.format("TDX:changeQueryType(%s, %s)", tostring(towerHash), tostring(targetType)))
+        end
     end
 end
 
 local function setupHooks()
     if not hookfunction or not hookmetamethod or not checkcaller then
-        warn("❌ Executor doesn't support required hook functions!")
+        warn("Executor không hỗ trợ đầy đủ các hàm hook cần thiết.")
         return
     end
-    
-    print("✅ Setting up hooks...")
-    
+
     local oldFireServer = hookfunction(Instance.new("RemoteEvent").FireServer, function(self, ...)
         handleRemote(self.Name, {...})
         return oldFireServer(self, ...)
     end)
-    
+
     local oldInvokeServer = hookfunction(Instance.new("RemoteFunction").InvokeServer, function(self, ...)
         handleRemote(self.Name, {...})
         return oldInvokeServer(self, ...)
     end)
-    
+
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         if checkcaller() then return oldNamecall(self, ...) end
@@ -609,8 +590,6 @@ local function setupHooks()
         end
         return oldNamecall(self, ...)
     end)
-    
-    print("✅ Hooks installed successfully!")
 end
 
 --==============================================================================
@@ -622,7 +601,7 @@ task.spawn(function()
         local now = tick()
         for i = #pendingQueue, 1, -1 do
             if now - pendingQueue[i].created > timeout then
-                warn("❌ Timeout:", pendingQueue[i].type, "|", pendingQueue[i].code)
+                warn("❌ Không xác thực được: " .. pendingQueue[i].type .. " | Code: " .. pendingQueue[i].code)
                 table.remove(pendingQueue, i)
             end
         end
@@ -653,6 +632,3 @@ getGlobalEnv().TDX_CLEANUP_SKIP_WAVE = cleanupSkipWaveConnection
 
 preserveSuperFunctions()
 setupHooks()
-
-print("🎬 MACRO RECORDER STARTED!")
-print("📁 Recording to:", outJson)
