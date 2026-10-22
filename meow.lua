@@ -56,7 +56,7 @@ local state = {
 local function notify(message)
     pcall(function()
         sg:SetCore("SendNotification", {
-            Title = "HUSH Beta",
+            Title = "moon Beta",
             Text = tostring(message),
             Duration = 5
         })
@@ -465,11 +465,11 @@ end
 
 local valid, window = pcall(function()
     return Rayfield:CreateWindow({
-        name = "HUSH Beta Tools",
+        name = "moon Beta",
         subtitle = "Visual & Misc",
         sidebarLayout = true,
         theme = "cobalt",
-        showName = "HUSH Beta"
+        showName = "moon Beta"
     })
 end)
 
