@@ -10,23 +10,42 @@ local Wrapper = Sonar("PlayerWrapper").GetClient()
 local DragonClass = Sonar("DragonClassClient")
 local DragonService = Sonar("DragonService")
 local MovementClass = Sonar("DragonMovementClass")
+local TutorialService = Sonar("TutorialService")
+local CatchupService = Sonar("CatchupService")
+local WorldService = Sonar("WorldService")
+local GameTeleportService = Sonar("TeleportService")
 local CurrencyNodes = workspace:WaitForChild("Interactions"):WaitForChild("Nodes"):WaitForChild("CurrencyNodes")
 local Spawned = CurrencyNodes:WaitForChild("Spawned")
 
-local FlightSpeed = 90
+local FlightSpeed = 800
 local SegmentLength = 130
 local TouchInterval = 1.15
-local ScanInterval = 2
+local ScanInterval = 12
+local PlanInterval = 1
 local Coins = {}
+local RouteQueue = {}
+local RouteDistance = 0
+local RouteReward = 0
+local RouteCount = 0
 local Skipped = {}
 local Target
 local TargetDeadline = 0
 local LastAttempt = 0
-local LastScan = 0
+local TotalCoinNodes = 0
+local ActiveCoinNodes = 0
+local NormalCoinNodes = 0
+local MegaCoinNodes = 0
+local ActiveNormalCoins = 0
+local ActiveMegaCoins = 0
+local RespawnLimit = 0
+local ActualSpeed = 0
+local LastSpeedPosition
+local LastSpeedTime
 local LastMount = -10
 local LastNoClip = 0
 local MountInProgress = false
 local Running = true
+local TutorialReady = false
 
 local LockedDragon
 local LockedRoot
@@ -41,6 +60,11 @@ local FlightProxy
 local FlightChanged
 local FlightFinished
 local SavedCollisions = setmetatable({}, {__mode = "k"})
+local HudGui
+local HudText
+local BalanceStart
+local BalanceStarted
+local ActualEarned = 0
 local LoopConnection
 
 local function RiderRoot()
@@ -181,23 +205,47 @@ local function LockFlight(dragon)
 end
 
 local function ScanCoins()
-    table.clear(Coins)
-    if type(getgc) ~= "function" then
-        return
+    local updated = {}
+
+    for _, part in ipairs(CurrencyNodes:GetChildren()) do
+        if part:IsA("BasePart") and (part.Name == "Coins" or part.Name == "MegaCoins") then
+            updated[part] = Coins[part] or {}
+        end
     end
-    for _, object in ipairs(getgc(true)) do
-        if type(object) == "table" then
-            local name = rawget(object, "CoinName")
-            if name == "Coins" or name == "MegaCoins" then
-                local part = rawget(object, "Part")
-                local hitbox = rawget(object, "HitBox")
-                if typeof(part) == "Instance" and part.Parent == CurrencyNodes
-                    and typeof(hitbox) == "Instance" and hitbox:IsA("BasePart") then
-                    Coins[part] = {Object = object, HitBox = hitbox}
+
+    if type(getgc) == "function" then
+        local ok, objects = pcall(getgc, true)
+        if ok and type(objects) == "table" then
+            for _, object in ipairs(objects) do
+                if type(object) == "table" then
+                    local name = rawget(object, "CoinName")
+                    if name == "Coins" or name == "MegaCoins" then
+                        local part = rawget(object, "Part")
+                        local hitbox = rawget(object, "HitBox")
+                        local entry = updated[part]
+                        if entry then
+                            entry.Object = object
+                            entry.HitBox = typeof(hitbox) == "Instance"
+                                and hitbox:IsA("BasePart") and hitbox or nil
+                        end
+                    end
                 end
             end
         end
     end
+
+    Coins = updated
+end
+
+local function GetCoinPosition(part)
+    local coin = Coins[part]
+    local hitbox = coin and coin.HitBox
+    if hitbox and hitbox.Parent and hitbox:IsDescendantOf(Spawned)
+        and (hitbox.Position - part.Position).Magnitude < 75
+        and hitbox.Position.Y > -500 then
+        return hitbox.Position
+    end
+    return part.Position + Vector3.new(0, 2, 0)
 end
 
 local function IsActive(part)
@@ -207,12 +255,10 @@ local function IsActive(part)
         return false
     end
     local coin = Coins[part]
-    return coin ~= nil
-        and not rawget(coin.Object, "Claimed")
-        and coin.HitBox.Parent ~= nil
-        and coin.HitBox:IsDescendantOf(Spawned)
-        and (coin.HitBox.Position - part.Position).Magnitude < 75
-        and coin.HitBox.Position.Y > -500
+    if not coin then
+        return false
+    end
+    return not coin.Object or not rawget(coin.Object, "Claimed")
 end
 
 local function ChooseCoin(position)
@@ -221,7 +267,7 @@ local function ChooseCoin(position)
     local now = os.clock()
     for part, coin in pairs(Coins) do
         if IsActive(part) and (not Skipped[part] or Skipped[part] <= now) then
-            local distance = (coin.HitBox.Position - position).Magnitude
+            local distance = (GetCoinPosition(part) - position).Magnitude
             if distance < best then
                 best = distance
                 nearest = part
@@ -229,6 +275,48 @@ local function ChooseCoin(position)
         end
     end
     return nearest, best
+end
+
+local function PlanRoute()
+    local root = RiderRoot()
+    local dragon = Wrapper.CurrentDragon
+    local position = root and root.Position or dragon and dragon.PrimaryPart and dragon.PrimaryPart.Position
+    if not position then
+        return
+    end
+    local available = {}
+    for part, coin in pairs(Coins) do
+        if IsActive(part) and (not Skipped[part] or Skipped[part] <= os.clock()) then
+            available[#available + 1] = {part, GetCoinPosition(part)}
+        end
+    end
+    local route = {}
+    local distance = 0
+    local reward = 0
+    while #available > 0 and Running do
+        local nearest = 1
+        local nearestDistance = math.huge
+        for i, entry in ipairs(available) do
+            local d = (entry[2] - position).Magnitude
+            if d < nearestDistance then
+                nearest, nearestDistance = i, d
+            end
+        end
+        local entry = table.remove(available, nearest)
+        route[#route + 1] = entry[1]
+        distance += nearestDistance
+        reward += entry[1].Name == "MegaCoins" and 25 or 2
+        position = entry[2]
+        if #route % 12 == 0 then
+            RunService.Heartbeat:Wait()
+        end
+    end
+    if Running then
+        RouteQueue = route
+        RouteCount = #route
+        RouteDistance = distance
+        RouteReward = reward
+    end
 end
 
 local function IsMounted(dragon)
@@ -412,8 +500,9 @@ local function AttemptCollect(dragon, now)
     if now - LastAttempt < TouchInterval or not IsActive(Target) then
         return
     end
-    local coin = Coins[Target]
-    local destination = coin.HitBox.Position
+    local part = Target
+    local coin = Coins[part]
+    local destination = GetCoinPosition(part)
     local rider = RiderRoot()
     local distance = (dragon.PrimaryPart.Position - destination).Magnitude
     if rider then
@@ -422,32 +511,43 @@ local function AttemptCollect(dragon, now)
     if distance > 8 then
         return
     end
+
     LastAttempt = now
     local touchedPart = rider or dragon.PrimaryPart
-    if type(firesignal) == "function" then
-        pcall(firesignal, coin.HitBox.Touched, touchedPart)
-    elseif type(firetouchinterest) == "function" then
-        pcall(function()
-            firetouchinterest(touchedPart, coin.HitBox, 0)
-            firetouchinterest(touchedPart, coin.HitBox, 1)
-        end)
+    local hitbox = coin.HitBox
+
+    if hitbox and hitbox.Parent then
+        if type(firesignal) == "function" then
+            pcall(firesignal, hitbox.Touched, touchedPart)
+        elseif type(firetouchinterest) == "function" then
+            pcall(function()
+                firetouchinterest(touchedPart, hitbox, 0)
+                firetouchinterest(touchedPart, hitbox, 1)
+            end)
+        end
     end
-    if IsActive(Target) then
-        pcall(function()
-            coin.Object:Loot()
-        end)
+
+    if coin.Object and type(coin.Object.Loot) == "function" then
+        if IsActive(part) then
+            pcall(function()
+                coin.Object:Loot()
+            end)
+        end
+    elseif IsActive(part) then
+        local remote = ReplicatedStorage.Remotes:FindFirstChild("GetCurrencyNodeRemote")
+        if remote and remote:IsA("RemoteEvent") then
+            remote:FireServer(part)
+            Skipped[part] = now + 3
+            ClearTarget()
+        end
     end
 end
 
 local function Step()
-    if not Running then
+    if not Running or not TutorialReady or WorldService.GetWorldName() == "Lobby" then
         return
     end
     local now = os.clock()
-    if now - LastScan >= ScanInterval then
-        LastScan = now
-        ScanCoins()
-    end
 
     local dragon = Wrapper.CurrentDragon
     if not dragon or not dragon.IsLocalPlayer or not dragon.PrimaryPart or not IsMounted(dragon) then
@@ -476,10 +576,16 @@ local function Step()
         ClearTarget()
     end
     if not Target then
-        local distance
-        Target, distance = ChooseCoin((RiderRoot() or dragon.PrimaryPart).Position)
+        for _, candidate in ipairs(RouteQueue) do
+            if IsActive(candidate) and (not Skipped[candidate] or Skipped[candidate] <= now) then
+                Target = candidate
+                break
+            end
+        end
         if Target then
-            TargetDeadline = now + math.max(18, distance / FlightSpeed * 3 + 12)
+            local distance = (GetCoinPosition(Target) - (RiderRoot() or dragon.PrimaryPart).Position).Magnitude
+            local estimatedSpeed = ActualSpeed > 20 and ActualSpeed or FlightSpeed * 0.35
+            TargetDeadline = now + math.max(18, distance / estimatedSpeed * 3 + 12)
         end
     end
 
@@ -494,7 +600,7 @@ local function Step()
         return
     end
 
-    FlyToCoin(dragon, Coins[Target].HitBox.Position)
+    FlyToCoin(dragon, GetCoinPosition(Target))
     AttemptCollect(dragon, now)
 end
 
@@ -507,6 +613,159 @@ local function Stop()
     ClearTarget()
     UnlockFlight()
     RestoreCollisions()
+    if HudGui then
+        HudGui:Destroy()
+        HudGui = nil
+        HudText = nil
+    end
+end
+
+local function CreateHud()
+    local playerGui = Player:WaitForChild("PlayerGui", 10)
+    if not playerGui or not Running then
+        return
+    end
+    local old = playerGui:FindFirstChild("Dem3x3CoinStats")
+    if old then
+        old:Destroy()
+    end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "Dem3x3CoinStats"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 200
+    gui.Parent = playerGui
+    HudGui = gui
+
+    local label = Instance.new("TextLabel")
+    label.Name = "CoinStats"
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+    label.TextStrokeTransparency = 0.2
+    label.Font = Enum.Font.GothamBold
+    label.TextScaled = true
+    label.TextWrapped = false
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Top
+    label.Position = UDim2.fromScale(0.02, 0.17)
+    label.Size = UDim2.fromScale(0.76, 0.18)
+    label.Text = "Coins: loading"
+    label.Parent = gui
+
+    local constraint = Instance.new("UITextSizeConstraint")
+    constraint.MinTextSize = 11
+    constraint.MaxTextSize = 22
+    constraint.Parent = label
+    HudText = label
+end
+
+local function UpdateTelemetry()
+    local now = os.clock()
+    local dragon = Wrapper.CurrentDragon
+    local root = dragon and dragon.PrimaryPart
+    if TutorialReady and root and IsMounted(dragon) then
+        if LastSpeedPosition and LastSpeedTime then
+            local deltaTime = now - LastSpeedTime
+            if deltaTime > 0 then
+                local delta = (root.Position - LastSpeedPosition).Magnitude
+                local sample = delta / deltaTime
+                if sample <= FlightSpeed * 3 then
+                    ActualSpeed = ActualSpeed * 0.65 + sample * 0.35
+                end
+            end
+        end
+        LastSpeedPosition = root.Position
+        LastSpeedTime = now
+    else
+        LastSpeedPosition = nil
+        LastSpeedTime = nil
+        ActualSpeed *= 0.75
+    end
+
+    local total = 0
+    local active = 0
+    local normals = 0
+    local mega = 0
+    local activeNormals = 0
+    local activeMegas = 0
+    for _, part in ipairs(CurrencyNodes:GetChildren()) do
+        if part:IsA("BasePart") and (part.Name == "Coins" or part.Name == "MegaCoins") then
+            total += 1
+            if part.Name == "Coins" then
+                normals += 1
+            else
+                mega += 1
+            end
+            if IsActive(part) then
+                active += 1
+                if part.Name == "Coins" then
+                    activeNormals += 1
+                else
+                    activeMegas += 1
+                end
+            end
+        end
+    end
+    TotalCoinNodes = total
+    ActiveCoinNodes = active
+    NormalCoinNodes = normals
+    MegaCoinNodes = mega
+    ActiveNormalCoins = activeNormals
+    ActiveMegaCoins = activeMegas
+    RespawnLimit = normals * 120 + mega * 750
+
+    local data = Wrapper.PlayerData
+    local folder = data and (data:FindFirstChild("Currency") or data:FindFirstChild("Currencies"))
+    local value = folder and folder:FindFirstChild("Coins")
+    if not value then
+        local stats = Player:FindFirstChild("leaderstats")
+        value = stats and stats:FindFirstChild("Coins")
+    end
+    if TutorialReady and WorldService.GetWorldName() ~= "Lobby" and value and (value:IsA("IntValue") or value:IsA("NumberValue")) then
+        if BalanceStart == nil then
+            BalanceStart = value.Value
+            BalanceStarted = now
+        end
+        ActualEarned = math.max(0, value.Value - BalanceStart)
+    end
+end
+
+local function UpdateHud()
+    if not HudText or not HudText.Parent then
+        return
+    end
+    local speed = math.max(ActualSpeed, 1)
+    local seconds = RouteDistance / speed + RouteCount * TouchInterval
+    local estimated = seconds > 0 and RouteReward * 3600 / seconds or 0
+    estimated = math.min(estimated, RespawnLimit)
+    local uncertainty = estimated * 0.2
+    local actualRate = 0
+    if BalanceStarted and os.clock() - BalanceStarted >= 10 then
+        actualRate = ActualEarned * 3600 / (os.clock() - BalanceStarted)
+    end
+
+    local status = TutorialReady and WorldService.GetWorldName() ~= "Lobby"
+        and "Coin Farm" or (Player:GetAttribute("TutorialSkipStatus") or "Waiting")
+    HudText.Text = string.format(
+        [[%s
+Coins: %d/%d  Mega: %d/%d  Route: %d
+Speed: %.0f studs/s
+Forecast: %.0f +/- %.0f Coins/h
+Earned: %d  |  Actual: %.0f Coins/h]],
+        status,
+        ActiveNormalCoins,
+        NormalCoinNodes,
+        ActiveMegaCoins,
+        MegaCoinNodes,
+        RouteCount,
+        ActualSpeed,
+        estimated,
+        uncertainty,
+        ActualEarned,
+        actualRate
+    )
 end
 
 local environment = type(getgenv) == "function" and getgenv() or _G
@@ -515,10 +774,293 @@ if type(environment.Dem3x3FarmStop) == "function" then
 end
 environment.Dem3x3FarmStop = Stop
 
-Player:SetAttribute("FarmMode", "Coins")
+Player:SetAttribute("FarmMode", "Tutorial")
+Player:SetAttribute("TutorialSkipStatus", "Detecting")
 
 LoopConnection = RunService.Heartbeat:Connect(function()
     pcall(Step)
+end)
+
+task.spawn(CreateHud)
+
+task.spawn(function()
+    while Running do
+        if TutorialReady and WorldService.GetWorldName() ~= "Lobby" then
+            pcall(ScanCoins)
+        end
+        task.wait(ScanInterval)
+    end
+end)
+
+task.spawn(function()
+    while Running do
+        if TutorialReady and WorldService.GetWorldName() ~= "Lobby" then
+            pcall(PlanRoute)
+        end
+        task.wait(PlanInterval)
+    end
+end)
+
+task.spawn(function()
+    while Running do
+        pcall(UpdateTelemetry)
+        pcall(UpdateHud)
+        task.wait(0.5)
+    end
+end)
+
+local function FindStageRemote(remoteName, moduleName)
+    local remotes = ReplicatedStorage:WaitForChild("Remotes")
+    local direct = remotes:FindFirstChild(remoteName)
+
+    if type(getloadedmodules) == "function" then
+        local ok, modules = pcall(getloadedmodules)
+        if ok and type(modules) == "table" then
+            for _, module in ipairs(modules) do
+                if typeof(module) == "Instance"
+                    and module:IsA("ModuleScript")
+                    and module.Name == moduleName then
+                    local loaded, result = pcall(require, module)
+                    if loaded and type(result) == "table" then
+                        local candidate = rawget(result, remoteName)
+                        if typeof(candidate) == "Instance" and candidate:IsA("RemoteFunction") then
+                            return candidate
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if type(getgc) == "function" and direct then
+        local ok, objects = pcall(getgc, true)
+        if ok and type(objects) == "table" then
+            for _, object in ipairs(objects) do
+                if type(object) == "table" and rawget(object, remoteName) == direct then
+                    return direct
+                end
+            end
+        end
+    end
+
+    return direct
+end
+
+local function RequestStage(remote, stage)
+    if not remote or not remote:IsA("RemoteFunction") then
+        return false
+    end
+    local ok, result = pcall(function()
+        return remote:InvokeServer(stage)
+    end)
+    return ok and result ~= false
+end
+
+local function WaitForState(check, seconds)
+    local deadline = os.clock() + seconds
+    while Running and os.clock() < deadline do
+        if check() then
+            return true
+        end
+        task.wait(0.2)
+    end
+    return check()
+end
+
+local function IsPrimaryComplete()
+    local ok, complete = pcall(TutorialService.HasCompletedPrimaryTutorial, Wrapper)
+    return ok and complete == true
+end
+
+local function IsCatchupActive()
+    local ok, active = pcall(CatchupService.IsInProgress, Wrapper)
+    return ok and active == true
+end
+
+local function FinishTutorialClient()
+    task.wait(1)
+    if not Running then
+        return
+    end
+    pcall(function()
+        local constants = Sonar("Constants")
+        if constants.InTutorial then
+            local client = Sonar("TutorialClient")
+            if client and type(client.EndPrimaryTutorial) == "function" then
+                client.EndPrimaryTutorial()
+            end
+        end
+    end)
+end
+
+local function GetAdventureDestination()
+    local data = Wrapper.PlayerData
+    local lastPlayed = data and data:FindFirstChild("LastPlayedWorld")
+    local unlocked = data and data:FindFirstChild("Worlds")
+    local name = "Grassland"
+
+    if lastPlayed and lastPlayed:IsA("StringValue") then
+        local candidate = lastPlayed.Value
+        if candidate ~= "" and candidate ~= "Lobby" then
+            local world = WorldService.GetWorldFromName(candidate)
+            local permission = unlocked and unlocked:FindFirstChild(candidate)
+            if world and world.GameId and permission and permission.Value then
+                name = candidate
+            end
+        end
+    end
+
+    return name, WorldService.GetWorldFromName(name)
+end
+
+local function TeleportAfterTutorial()
+    if WorldService.GetWorldName() ~= "Lobby" then
+        return true
+    end
+
+    local name, destination = GetAdventureDestination()
+    local remote = ReplicatedStorage:WaitForChild("Remotes"):FindFirstChild("WorldTeleportRemote")
+
+    Player:SetAttribute("TutorialTeleportWorld", name)
+
+    if not remote or not remote:IsA("RemoteFunction") or not destination or not destination.GameId then
+        Player:SetAttribute("TutorialSkipStatus", "TeleportUnavailable")
+        return false
+    end
+
+    for attempt = 1, 2 do
+        if not Running then
+            return false
+        end
+
+        local teleporting = false
+        pcall(function()
+            teleporting = GameTeleportService.IsTeleportingToWorld(Player)
+        end)
+
+        if teleporting then
+            Player:SetAttribute("TutorialSkipStatus", "TeleportPending")
+            return false
+        end
+
+        Player:SetAttribute("TutorialSkipStatus", "TeleportRequest")
+        local ok, result = pcall(function()
+            return remote:InvokeServer(destination.GameId, {MoveBackToAdventure = true})
+        end)
+
+        if ok and result ~= false then
+            Player:SetAttribute("TutorialSkipStatus", "TeleportPending")
+            return false
+        end
+
+        Player:SetAttribute("TutorialSkipStatus", "TeleportRejected")
+        task.wait(2)
+    end
+
+    return false
+end
+
+task.spawn(function()
+    local stageValue = Wrapper.PrimaryTutorialStageValue
+    if not stageValue then
+        for i = 1, 100 do
+            if not Running then
+                return
+            end
+            stageValue = Wrapper.PrimaryTutorialStageValue
+            if stageValue then
+                break
+            end
+            task.wait(0.2)
+        end
+    end
+
+    if not stageValue or not Running then
+        Player:SetAttribute("TutorialSkipStatus", "DataUnavailable")
+        return
+    end
+
+    Player:SetAttribute("TutorialStageDetected", stageValue.Value)
+
+    if not IsPrimaryComplete() then
+        local remote = FindStageRemote("SetTutorialStageRemote", "NextWorld")
+        if not remote then
+            Player:SetAttribute("TutorialSkipStatus", "RemoteUnavailable")
+            return
+        end
+
+        local stages = {
+            "GettingEggs",
+            "HatchingEggs",
+            "GrowingDragon",
+            "SkillsIntroduction",
+            "NextWorld",
+            "Complete"
+        }
+
+        local currentStage = TutorialService.GetPrimaryStage(Wrapper)
+        local currentIndex = table.find(stages, currentStage) or 1
+
+        for index = currentIndex + 1, #stages do
+            if not Running or IsPrimaryComplete() then
+                break
+            end
+
+            local stage = stages[index]
+            Player:SetAttribute("TutorialSkipStatus", "RequestingStage")
+            Player:SetAttribute("TutorialSkipStep", stage)
+            local requestAccepted = RequestStage(remote, stage)
+            local advanced = WaitForState(function()
+                return IsPrimaryComplete()
+                    or (table.find(stages, stageValue.Value) or 0) >= index
+            end, 4)
+
+            Player:SetAttribute("TutorialStageDetected", stageValue.Value)
+
+            if not advanced then
+                Player:SetAttribute("TutorialSkipStatus", requestAccepted and "StageNotConfirmed" or "StageRejected")
+                return
+            end
+        end
+
+        if not WaitForState(IsPrimaryComplete, 5) then
+            Player:SetAttribute("TutorialStageDetected", stageValue.Value)
+            Player:SetAttribute("TutorialSkipStatus", "PrimaryRejected")
+            return
+        end
+
+        Player:SetAttribute("TutorialStageDetected", "Complete")
+        Player:SetAttribute("TutorialSkipStatus", "PrimaryComplete")
+        FinishTutorialClient()
+    end
+
+    if not Running then
+        return
+    end
+
+    if IsCatchupActive() then
+        Player:SetAttribute("TutorialSkipStatus", "CatchupRequest")
+        local remote = FindStageRemote("SetCatchupStageRemote", "CatchupFinalEgg")
+        RequestStage(remote, "Complete")
+
+        if not WaitForState(function()
+            return not IsCatchupActive()
+        end, 5) then
+            Player:SetAttribute("TutorialSkipStatus", "CatchupRejected")
+            return
+        end
+    end
+
+    if Running and IsPrimaryComplete() then
+        if not TeleportAfterTutorial() then
+            Player:SetAttribute("FarmMode", "Teleport")
+            return
+        end
+
+        TutorialReady = true
+        Player:SetAttribute("TutorialSkipStatus", "Complete")
+        Player:SetAttribute("FarmMode", "Coins")
+    end
 end)
 
 
